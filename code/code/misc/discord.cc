@@ -1,7 +1,10 @@
 #include <iostream>
 #include <fstream>
 #include <filesystem>
+#include <queue>
 #include <thread>
+#include <mutex>
+#include <utility>
 
 #include "discord.h"
 
@@ -24,9 +27,22 @@ sstring Discord::CHANNEL_ACHIEVEMENT;
 // threshold level for discord mob kill notifications
 int Discord::ACHIEVEMENT_THRESHOLD;
 
-// read the configuration
+// for thread management
+bool Discord::stop_thread;
+std::thread Discord::messenger_thread;
+std::queue<std::pair<sstring, sstring>> Discord::message_queue;
+std::mutex Discord::queue_mutex;
+
+
+// read the configuration and do setup
 bool Discord::doConfig() {
     using std::string;
+    // worker thread setup
+    stop_thread = false;
+    messenger_thread = std::thread(Discord::messenger);
+
+
+    // configuration
     string configFile = "discord.cfg";
 
     std::string empty_string = "";
@@ -62,6 +78,7 @@ bool Discord::doConfig() {
 // we use the curl library for this and keep it simple
 bool Discord::sendMessageAsync(sstring channel, sstring msg)
 {
+    vlogf(LOG_MISC, format("Discord webhooks send from thread: '%s'")  % msg);
 
     CURL* curl = curl_easy_init();
     if (!curl) {
@@ -92,21 +109,48 @@ bool Discord::sendMessageAsync(sstring channel, sstring msg)
     return true;
 }
 
-void Discord::sendMessage(sstring channel, sstring msg, bool detach) 
+void Discord::sendMessage(sstring channel, sstring msg) 
 {
     if (channel == "") {
         // no channel configuration, so bail
         return;
     }
 
-    vlogf(LOG_MISC, format("Discord webhooks: '%s'")  % msg);
+    vlogf(LOG_MISC, format("Discord webhooks add to thread: '%s'")  % msg);
 
-    // we want to do this asynchronously so POST lag doesn't hang the mud
-    std::thread thread(sendMessageAsync, channel, msg);
+    std::lock_guard<std::mutex> lock(queue_mutex);
+    message_queue.push({channel, msg});
+}
 
-    if (!detach) {
-        thread.join();
-    } else {
-        thread.detach();
+void Discord::messenger()
+{
+    while (true) {
+        std::lock_guard<std::mutex> lock(queue_mutex);
+        if(message_queue.empty() && !stop_thread) {
+            continue;
+        }
+
+        if (stop_thread) {
+            break;
+        }
+
+        std::pair<sstring, sstring> message = message_queue.front();
+        message_queue.pop();
+
+        sendMessageAsync(message.first, message.second);
     }
+}
+
+bool Discord::doCleanup()
+{
+    // let the thread finish
+    messenger_thread.join();
+
+    // Signal the worker thread to stop
+    {
+        std::lock_guard<std::mutex> lock(queue_mutex);
+        stop_thread = true;
+    }
+
+    return true;
 }
