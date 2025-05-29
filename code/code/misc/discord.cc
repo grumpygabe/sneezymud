@@ -40,8 +40,26 @@ std::mutex Discord::queue_mutex;
 // read the configuration
 bool Discord::doConfig() {
   using std::string;
+  char buff[256];
+  
+  //FILE* fp;
 
   string configFile = "discord.cfg";
+  string logfile = "discord.log";
+
+  // remove the old logfile
+  sprintf(buff, "rm %s", logfile.c_str());
+  system(buff);
+
+  // set up the new logfile
+  
+  // if (!(fp = fopen(logfile.c_str(), "w+"))) {      
+  //   fclose(fp);
+  //   vlogf(LOG_FILE, "Couldn't open discord logfile.");
+  // } else {
+  //   fprintf(fp, "%s", "1,sys,Discord logfile opened OK.\n");      
+  //   fclose(fp);
+  // }
 
   std::string empty_string = "";
 

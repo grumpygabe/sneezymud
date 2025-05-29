@@ -65,8 +65,15 @@ int main(int argc, char* argv[]) {
   MUD_NAME_VERS = format("%s %s") % MUD_NAME % readVersionFromFile();
   vlogf(LOG_MISC, MUD_NAME_VERS);
 
-  if (!Discord::doConfig())
+  if (!Discord::doConfig()) {
     vlogf(LOG_MISC, "Discord configuration failed.");
+  } else {
+    vlogf(LOG_MISC, "Launching discord daemon");
+  }
+
+  // if (0 != vfork()) {
+  //   vsystem("python3 ./code/discord_daemon.py");
+  // }
 
   if (Config::NoSpecials())
     vlogf(LOG_MISC, "Suppressing assignment of special routines.");
